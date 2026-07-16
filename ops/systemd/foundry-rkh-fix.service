@@ -1,0 +1,6 @@
+[Unit]
+Description=One-time remediation of rkhunter warnings (SSH root policy + hidden-file whitelist)
+
+[Service]
+Type=oneshot
+ExecStart=/home/mike/foundry-ops/foundry-rkh-fix.sh
