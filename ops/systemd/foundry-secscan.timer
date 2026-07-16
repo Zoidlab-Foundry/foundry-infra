@@ -1,0 +1,10 @@
+[Unit]
+Description=Daily Foundry security scan (06:25 UTC)
+
+[Timer]
+OnCalendar=*-*-* 06:25:00
+RandomizedDelaySec=180
+Persistent=true
+
+[Install]
+WantedBy=timers.target

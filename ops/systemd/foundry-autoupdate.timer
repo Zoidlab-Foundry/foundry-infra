@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly Foundry auto-update (Sundays 04:15 UTC)
+
+[Timer]
+OnCalendar=Sun *-*-* 04:15:00
+RandomizedDelaySec=300
+Persistent=true
+
+[Install]
+WantedBy=timers.target

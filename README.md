@@ -16,3 +16,9 @@ bash make_app_role.sh  # creates the RLS-enforced app_rls role + grants
 
 Secrets live only in `.env` (git-ignored, chmod 600). Each app reads DATABASE_URL / REDIS_URL /
 MINIO_* from its own backend `.env`, derived from these.
+
+## Host operations (`ops/`)
+
+Systemd-based automation for the zoidberg host — **weekly OS auto-updates** (patch → conditional
+reboot → health-verify) and a **daily security scan** (lynis + rkhunter + debsums + auth/network/
+integrity checks), both emailing a branded report via Resend. See [`ops/README.md`](ops/README.md).

@@ -1,0 +1,8 @@
+[Unit]
+Description=Foundry on-demand system update (apply + report, no reboot)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/mike/foundry-ops/foundry-autoupdate.sh noreboot

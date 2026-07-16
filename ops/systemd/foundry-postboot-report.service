@@ -1,0 +1,11 @@
+[Unit]
+Description=Foundry post-reboot health report (acts only after a weekly-update reboot)
+Wants=network-online.target
+After=network-online.target docker.service cloudflared.service multi-user.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/mike/foundry-ops/foundry-postboot-report.sh
+
+[Install]
+WantedBy=multi-user.target
