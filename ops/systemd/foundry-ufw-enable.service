@@ -1,0 +1,6 @@
+[Unit]
+Description=Safely enable the ufw host firewall (allow SSH first, dead-man auto-revert)
+
+[Service]
+Type=oneshot
+ExecStart=/home/mike/foundry-ops/foundry-ufw-enable.sh
