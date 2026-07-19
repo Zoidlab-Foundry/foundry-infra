@@ -309,10 +309,18 @@ graph TB
     BLD["Builder :8200"] -->|"rag_query"| RAG["RAG :8600"]
     BLD -->|"memory_recall"| MM["MemoryMaker :8500"]
     BLD -->|"prompt_run"| PR["Prompter :8400"]
+    BLD -->|"vision_run"| VL["VisionLab :8704"]
+    BLD -->|"voice_run"| VO["VoiceLab :8705"]
+    BLD -->|"mcp_call"| MC["MCPLab :8706"]
+    BLD -->|"swarm_run"| SW["SwarmLab :8707"]
 ```
 
 Builder composes the suite: a workflow node can query a RAG knowledge base, recall from a memory
-store, or run a versioned prompt as a step.
+store, run a versioned prompt, extract from an image (VisionLab), simulate a voice agent
+(VoiceLab), call a governed MCP tool (MCPLab), or hand a task to a multi-agent swarm (SwarmLab).
+The lab nodes call each lab's session-authed API as the run's user, start its durable Celery job,
+and poll to completion — TrustGate preflight and SpendGuard metering apply inside the lab exactly
+as on a direct run (added 2026-07-19, verified with a live 7-step swarm run through a workflow).
 
 ### The export envelope
 
