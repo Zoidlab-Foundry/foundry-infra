@@ -1,6 +1,6 @@
 # ZoidLab Foundry — Platform Architecture
 
-**Status:** current state as deployed, verified 2026-07-17
+**Status:** current state as deployed, verified 2026-07-19
 **Host:** `zoidberg` · Ubuntu 24.04.4 LTS · kernel 6.8.0-134 · 12 cores · 125 GB RAM · 98 GB disk (44% used, 53 GB free)
 **Scope:** 13 applications + hub + marketing site, 16 repositories, one host
 
@@ -83,19 +83,25 @@ Tunnel ID `f219761d-4111-4963-bcf5-45b479322b99`. Ingress rules terminate in a `
 
 | # | App | Public hostname | Web | API | Data | Worker |
 |---|-----|-----------------|-----|-----|------|--------|
-| 01 | AI Workflow Builder | `builder.zoidlab.ai` | 3100 | 8200 | SQLite | — |
-| 02 | Agent Marketplace | `marketplace.zoidlab.ai` | 3300 | 8300 | SQLite | — |
-| 03 | Prompt Studio | `prompter.zoidlab.ai` | 3400 | 8400 | SQLite | — |
-| 04 | MemoryMaker | `memorymaker.zoidlab.ai` | 3500 | 8500 | SQLite | — |
-| 05 | RAG Builder | `rag.zoidlab.ai` | 3600 | 8600 | SQLite | — |
-| 06 | TrustGate (policy) | `trustgate.zoidlab.ai` | 3700 | 8700 | SQLite | — |
-| 07 | SpendGuard (cost) | `spendguard.zoidlab.ai` | 3701 | 8701 | SQLite | — |
-| 08 | ModelBench | `modelbench.zoidlab.ai` | 3702 | 8702 | SQLite | — |
-| 09 | Eval | `eval.zoidlab.ai` | 3703 | 8703 | SQLite | — |
-| 10 | VisionLab | `vision.zoidlab.ai` | 3704 | 8704 | **Postgres+RLS** | ✅ |
-| 11 | VoiceLab | `voice.zoidlab.ai` | 3705 | 8705 | **Postgres+RLS** | ✅ |
-| 12 | MCPLab | `mcplab.zoidlab.ai` | 3706 | 8706 | **Postgres+RLS** | ✅ |
-| 13 | SwarmLab | `swarm.zoidlab.ai` | 3707 | 8707 | **Postgres+RLS** | ✅ |
+| 01 | AI Workflow Builder | `builder.zoidlab.ai` | 3100 | 8200 | Postgres+RLS | — |
+| 02 | Agent Marketplace | `marketplace.zoidlab.ai` | 3300 | 8300 | Postgres+RLS | — |
+| 03 | Prompt Studio | `prompter.zoidlab.ai` | 3400 | 8400 | Postgres+RLS | — |
+| 04 | MemoryMaker | `memorymaker.zoidlab.ai` | 3500 | 8500 | Postgres+RLS | — |
+| 05 | RAG Builder | `rag.zoidlab.ai` | 3600 | 8600 | Postgres+RLS | — |
+| 06 | TrustGate (policy) | `trustgate.zoidlab.ai` | 3700 | 8700 | Postgres+RLS | — |
+| 07 | SpendGuard (cost) | `spendguard.zoidlab.ai` | 3701 | 8701 | Postgres+RLS | — |
+| 08 | ModelBench | `modelbench.zoidlab.ai` | 3702 | 8702 | Postgres+RLS | — |
+| 09 | Eval | `eval.zoidlab.ai` | 3703 | 8703 | Postgres+RLS | — |
+| 10 | VisionLab | `vision.zoidlab.ai` | 3704 | 8704 | Postgres+RLS | ✅ |
+| 11 | VoiceLab | `voice.zoidlab.ai` | 3705 | 8705 | Postgres+RLS | ✅ |
+| 12 | MCPLab | `mcplab.zoidlab.ai` | 3706 | 8706 | Postgres+RLS | ✅ |
+| 13 | SwarmLab | `swarm.zoidlab.ai` | 3707 | 8707 | Postgres+RLS | ✅ |
+
+> **2026-07-19:** all 13 apps now run on Postgres with per-tenant RLS. The nine former
+> SQLite apps were migrated (data copied with verified per-table counts) and each was
+> verified live through its authenticated API. Tables whose semantics are public-catalog
+> (Marketplace agents), org-shared (Builder workflows/runs), or child-of-guarded-parent
+> keep app-level scoping — RLS guards the owner-scoped tables.
 
 ### 3.2 Platform surfaces
 
@@ -111,28 +117,21 @@ Tunnel ID `f219761d-4111-4963-bcf5-45b479322b99`. Ingress rules terminate in a `
 
 ---
 
-## 4. The two-tier reality
+## 4. One persistence tier (since 2026-07-19)
 
-This is the single most important fact about the platform's current state, and the largest gap
-between blueprint and deployment.
+All **13 of 13** apps now run on Postgres 16 with per-tenant Row-Level Security via the
+non-superuser `app_rls` role. The nine former SQLite apps were migrated with their data
+(row counts verified per table) and each verified live through its authenticated API.
 
-```mermaid
-graph LR
-    subgraph t3 ["Tier 3 — 4 apps on the enterprise stack"]
-        direction TB
-        A["VisionLab · VoiceLab<br/>MCPLab · SwarmLab"]
-        A --> B["Postgres 16 + FORCE RLS<br/>Celery durable jobs<br/>MinIO objects (VisionLab)"]
-    end
-    subgraph t12 ["Tier 1/2 — 9 apps not yet migrated"]
-        direction TB
-        C["Builder · Marketplace · Prompter<br/>MemoryMaker · RAG · TrustGate<br/>SpendGuard · ModelBench · Eval"]
-        C --> D["SQLite file per app<br/>Synchronous request-path work<br/>Tenant isolation in app code only"]
-    end
-```
+What still differs by app is **job execution**: the four labs (VisionLab, VoiceLab, MCPLab,
+SwarmLab) run long work through Celery workers with durable tracked jobs; the other nine do
+their (shorter) engine work synchronously in the request path. Extending Celery to the
+synchronous nine is the natural next increment, not a correctness gap.
 
-Only **4 of 13** apps run the stack described in blueprint §3.2. The other 9 are functional and
-gated, but they persist to a single SQLite file, do long work inside the request, and enforce tenant
-isolation in Python rather than in the database.
+RLS scoping is deliberate per table, not blanket: owner-scoped tables carry FORCE RLS;
+public-catalog tables (Marketplace agents), org-shared tables (Builder workflows/runs), and
+child tables reached only through an RLS-guarded parent keep their app-level scoping so
+sharing semantics survive. Explicit owner checks guarding writes were kept verbatim.
 
 ---
 
@@ -140,7 +139,8 @@ isolation in Python rather than in the database.
 
 ### 5.1 Postgres + Row-Level Security
 
-Databases: `foundry`, `visionlab`, `voicelab`, `mcplab`, `swarmlab`.
+Databases: `foundry`, `visionlab`, `voicelab`, `mcplab`, `swarmlab`, `builder`, `marketplace`,
+`prompter`, `memorymaker`, `rag`, `trustgate`, `spendguard`, `modelbench`, `eval`.
 
 Isolation does not depend on application code being correct. Two roles enforce it:
 
@@ -372,15 +372,17 @@ Ordered by consequence. These are real, not hypothetical.
 
 | # | Gap | Consequence |
 |---|-----|-------------|
-| 1 | **9 of 13 apps still on SQLite** with no RLS and no workers | Tenant isolation rests on app code; long work blocks the request path; single-writer contention |
-| 2 | **No shared libraries** — `auth.py`, `entitlements.py`, `envelope.py`, `llm.py`, `pricing.py` are copy-pasted into all 13 repos | A security fix must land 13 times. Copies drift silently. This is the top structural risk |
-| 3 | **Host is not git-tracked**; deploy is file copy | No deploy provenance, no `git`-based rollback, drift is invisible without an explicit audit |
-| 4 | **No automated database backup** — the only timers on the host are autoupdate and secscan | Postgres, SQLite files, and MinIO objects have no scheduled backup |
-| 5 | **Single host, no HA** | `zoidberg` is a single point of failure for all 13 apps |
-| 6 | **Secrets in plaintext `.env`** — session secret, relay keys, Redis password | No vault; blast radius of host compromise is total |
-| 7 | **4 stale `database.py`** files on the deployed Tier-3 apps (dead: 0 importers) | Cosmetic, but misleading to a reader — pre-Postgres leftovers |
-| 8 | **lynis 60/100** | Headroom on host hardening |
-| 9 | **MinIO used by VisionLab only** | Other apps' artifacts live on local disk |
+| 1 | **No shared libraries** — `auth.py`, `entitlements.py`, `envelope.py`, `llm.py`, `pricing.py` are copy-pasted into all 13 repos | A security fix must land 13 times. Copies drift silently. This is the top structural risk |
+| 2 | **Host is not git-tracked**; deploy is file copy | No deploy provenance, no `git`-based rollback, drift is invisible without an explicit audit |
+| 3 | **Single host, no HA** | `zoidberg` is a single point of failure for all 13 apps |
+| 4 | **Secrets in plaintext `.env`** — session secret, relay keys, Redis password | No vault; blast radius of host compromise is total |
+| 5 | **9 apps run engine work synchronously** (no Celery worker) | Long requests block the request path; acceptable at current load, next increment |
+| 6 | **lynis 60/100** | Headroom on host hardening |
+| 7 | **MinIO used by VisionLab only** | Other apps' artifacts live on local disk |
+
+**Closed since 2026-07-17:** the SQLite tier (all 13 apps now Postgres+RLS, data migrated and
+verified 2026-07-19); the missing backup automation (nightly verified backup timer, 05:10 UTC,
+emailed report); the stale `database.py` files (removed from host and repos).
 
 ---
 
