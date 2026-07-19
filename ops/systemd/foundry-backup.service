@@ -1,0 +1,8 @@
+[Unit]
+Description=Nightly estate backup (Postgres + SQLite + MinIO, verified, 14-day retention)
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/mike/foundry-ops/foundry-backup.sh
