@@ -6,7 +6,8 @@ say() { printf '%-34s %s\n' "$1" "$2"; }
 
 # 1. API health
 for e in builder:8200 marketplace:8300 prompter:8400 memorymaker:8500 rag:8600 trustgate:8700 \
-         spendguard:8701 modelbench:8702 eval:8703 visionlab:8704 voicelab:8705 mcplab:8706 swarmlab:8707; do
+         spendguard:8701 modelbench:8702 eval:8703 visionlab:8704 voicelab:8705 mcplab:8706 swarmlab:8707 \
+         extractlab:8708 dataforge:8709 insight:8710; do
   a="${e%%:*}"; p="${e##*:}"
   c=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "http://127.0.0.1:$p/api/health")
   [ "$c" = "200" ] || { FAIL=1; }
@@ -14,7 +15,7 @@ for e in builder:8200 marketplace:8300 prompter:8400 memorymaker:8500 rag:8600 t
 done
 
 # 2. Web heads (200 public, 307 = SSO gate; anything else fails)
-for p in 3100 3200 3300 3400 3500 3600 3700 3701 3702 3703 3704 3705 3706 3707 8090; do
+for p in 3100 3200 3300 3400 3500 3600 3700 3701 3702 3703 3704 3705 3706 3707 3708 3709 3710 8090; do
   c=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://127.0.0.1:$p/")
   case "$c" in 200|307) ;; *) FAIL=1 ;; esac
   say "web::$p" "$c"
@@ -33,7 +34,8 @@ PY
 )
 for e in "marketplace:8300:/api/agents" "trustgate:8700:/api/policies" "modelbench:8702:/api/datasets" \
          "eval:8703:/api/targets" "rag:8600:/api/knowledge-bases" "memorymaker:8500:/api/stores" \
-         "prompter:8400:/api/prompts" "spendguard:8701:/api/projects" "builder:8200:/api/workflows"; do
+         "prompter:8400:/api/prompts" "spendguard:8701:/api/projects" "builder:8200:/api/workflows" \
+         "extractlab:8708:/api/schemas" "dataforge:8709:/api/generators" "insight:8710:/api/datasets"; do
   a=$(echo "$e" | cut -d: -f1); p=$(echo "$e" | cut -d: -f2); path=$(echo "$e" | cut -d: -f3)
   c=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 -H "Cookie: zb_session=$TOK" "http://127.0.0.1:$p$path")
   [ "$c" = "200" ] || FAIL=1

@@ -22,6 +22,9 @@ case "$DIR" in
   zoidlab-builder)  API=zoidlab-builder-api; WEBSVC=zoidlab-builder-web; PORT=8200 ;;
   zoidlab-foundry)  API=""; WEBSVC=zoidlab-foundry-web; PORT=3200 ;;
   zoidlab-rag-builder) API=rag-api; WEBSVC=rag-web; PORT=8600 ;;
+  zoidlab-extractlab) API=extractlab-api; WEBSVC=extractlab-web; PORT=8708 ;;
+  zoidlab-dataforge) API=dataforge-api; WEBSVC=dataforge-web; PORT=8709 ;;
+  zoidlab-insight)  API=insight-api; WEBSVC=insight-web; PORT=8710 ;;
   *)                API=$app-api; WEBSVC=$app-web; PORT="" ;;
 esac
 

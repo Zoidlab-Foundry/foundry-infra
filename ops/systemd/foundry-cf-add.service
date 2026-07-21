@@ -1,0 +1,7 @@
+[Unit]
+Description=Add ExtractLab/DataForge/Insight ingress to the cloudflared tunnel
+Wants=cloudflared.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/mike/foundry-ops/foundry-cf-add.sh
