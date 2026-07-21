@@ -1,8 +1,8 @@
 # ZoidLab Foundry — Platform Architecture
 
-**Status:** current state as deployed, verified 2026-07-19
-**Host:** `zoidberg` · Ubuntu 24.04.4 LTS · kernel 6.8.0-134 · 12 cores · 125 GB RAM · 98 GB disk (44% used, 53 GB free)
-**Scope:** 13 applications + hub + marketing site, 16 repositories, one host
+**Status:** current state as deployed, verified 2026-07-21
+**Host:** `zoidberg` · Ubuntu 24.04.4 LTS · kernel 6.8.0-136 · 12 cores · 125 GB RAM · 98 GB disk
+**Scope:** 16 applications + hub + marketing site, 20 repositories, one host
 
 This document describes what is **actually running**, not what was planned. Every claim below was
 checked against the live host or the committed source on the date above; the method is recorded in
@@ -96,8 +96,18 @@ Tunnel ID `f219761d-4111-4963-bcf5-45b479322b99`. Ingress rules terminate in a `
 | 11 | VoiceLab | `voice.zoidlab.ai` | 3705 | 8705 | Postgres+RLS | ✅ |
 | 12 | MCPLab | `mcplab.zoidlab.ai` | 3706 | 8706 | Postgres+RLS | ✅ |
 | 13 | SwarmLab | `swarm.zoidlab.ai` | 3707 | 8707 | Postgres+RLS | ✅ |
+| 14 | ExtractLab | `extractlab.zoidlab.ai` | 3708 | 8708 | Postgres+RLS | — |
+| 15 | DataForge | `dataforge.zoidlab.ai` | 3709 | 8709 | Postgres+RLS | — |
+| 16 | Insight | `insight.zoidlab.ai` | 3710 | 8710 | Postgres+RLS | — |
 
-> **2026-07-19:** all 13 apps now run on Postgres with per-tenant RLS. The nine former
+> **2026-07-21:** three apps added — ExtractLab (schema-driven text extraction), DataForge
+> (synthetic data studio that feeds ModelBench/Eval/RAG), Insight (NL data analyst that has the
+> relay emit a *validated* analysis plan the app executes in pure Python — the model never touches
+> code or SQL). All three were **born on foundry-common** (thin shims + shared Postgres+RLS core),
+> deployed via the git pipeline, and verified: full 16-app smoke ALL PASS, seeds served through the
+> authenticated RLS stack, stranger-tenant isolation holds.
+
+> **2026-07-19:** all 13 apps then ran on Postgres with per-tenant RLS. The nine former
 > SQLite apps were migrated (data copied with verified per-table counts) and each was
 > verified live through its authenticated API. Tables whose semantics are public-catalog
 > (Marketplace agents), org-shared (Builder workflows/runs), or child-of-guarded-parent
@@ -113,7 +123,7 @@ Tunnel ID `f219761d-4111-4963-bcf5-45b479322b99`. Ingress rules terminate in a `
 | Console | `console.zoidlab.ai` | 7681 | `ttyd` web terminal |
 | Search | `search.zoidlab.ai` | 5420 | Search service |
 
-**33 systemd services** run the estate: 14 web + 13 API + 4 workers + `cloudflared` + `zoidlab`.
+**39 systemd services** run the estate: 17 web + 16 API + 4 workers + `cloudflared` + `zoidlab`.
 
 ---
 
@@ -140,7 +150,8 @@ sharing semantics survive. Explicit owner checks guarding writes were kept verba
 ### 5.1 Postgres + Row-Level Security
 
 Databases: `foundry`, `visionlab`, `voicelab`, `mcplab`, `swarmlab`, `builder`, `marketplace`,
-`prompter`, `memorymaker`, `rag`, `trustgate`, `spendguard`, `modelbench`, `eval`.
+`prompter`, `memorymaker`, `rag`, `trustgate`, `spendguard`, `modelbench`, `eval`,
+`extractlab`, `dataforge`, `insight`.
 
 Isolation does not depend on application code being correct. Two roles enforce it:
 
