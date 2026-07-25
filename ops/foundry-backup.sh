@@ -90,6 +90,37 @@ SETS=$(find "$ROOT" -maxdepth 1 -mindepth 1 -type d | wc -l)
 ALLSZ=$(du -sh "$ROOT" | cut -f1)
 FREE=$(df -h /home | awk 'NR==2{print $4}')
 
+# ---------- 5b. Off-site replication to Google Drive (rclone, same account as hermes) --------
+# Pushes tonight's whole set to gdrive:zoidberg-foundry-backups/<stamp>/, verifies the file
+# count landed, and prunes Drive copies older than 30 days. A missing rclone/remote is a
+# WARNING (local backup still valid); an upload failure with rclone present is CRITICAL.
+# This service runs as root, but the rclone binary + gdrive OAuth config live in mike's home
+# (same Google account as hermes). Point rclone at that config explicitly with --config.
+RCLONE_BIN=/home/mike/.local/bin/rclone
+RCLONE_CONF=/home/mike/.config/rclone/rclone.conf
+RC() { "$RCLONE_BIN" --config "$RCLONE_CONF" "$@"; }
+REMOTE=gdrive:zoidberg-foundry-backups
+OFFSITE_LINE="not attempted"
+if [ -x "$RCLONE_BIN" ] && [ -r "$RCLONE_CONF" ] && RC listremotes 2>/dev/null | grep -q '^gdrive:'; then
+  LOCAL_N=$(find "$DEST" -type f | wc -l)
+  if RC copy "$DEST" "$REMOTE/$STAMP/" 2>>"$STATE/backup-errors.log"; then
+    REMOTE_N=$(RC lsf "$REMOTE/$STAMP/" --recursive 2>/dev/null | grep -c . )
+    if [ "$REMOTE_N" -ge "$LOCAL_N" ]; then
+      OFFSITE_LINE="$REMOTE/$STAMP/ — $REMOTE_N/$LOCAL_N files verified"
+      # 30-day retention on Drive, then drop emptied stamp folders
+      RC delete "$REMOTE" --min-age 30d 2>>"$STATE/backup-errors.log" || true
+      RC rmdirs "$REMOTE" --leave-root 2>>"$STATE/backup-errors.log" || true
+    else
+      FAILS+=("offsite: uploaded $REMOTE_N of $LOCAL_N files"); OFFSITE_LINE="INCOMPLETE ($REMOTE_N/$LOCAL_N)"
+    fi
+  else
+    FAILS+=("offsite: rclone copy to Google Drive failed"); OFFSITE_LINE="UPLOAD FAILED (local set is intact)"
+  fi
+else
+  WARNS+=("offsite: rclone or gdrive remote not available — local backup only")
+  OFFSITE_LINE="skipped (rclone/remote missing)"
+fi
+
 if [ ${#FAILS[@]} -gt 0 ]; then VERDICT="CRITICAL (${#FAILS[@]} failed)";
 elif [ ${#WARNS[@]} -gt 0 ]; then VERDICT="WARNINGS (${#WARNS[@]})";
 else VERDICT="OK"; fi
@@ -118,9 +149,12 @@ else VERDICT="OK"; fi
   echo "-- Objects --"
   echo "minio data: $MINIO_LINE"
   echo
+  echo "-- Off-site (Google Drive, rclone) --"
+  echo "$OFFSITE_LINE"
+  echo
   echo "-- Storage --"
   echo "This set:        $TOTAL  ($DEST)"
-  echo "Sets retained:   $SETS (${RETAIN_DAYS}-day retention, $PURGED purged tonight)"
+  echo "Sets retained:   $SETS local (${RETAIN_DAYS}-day, $PURGED purged) · off-site 30-day on Drive"
   echo "All backups:     $ALLSZ"
   echo "Disk free:       $FREE"
   echo
