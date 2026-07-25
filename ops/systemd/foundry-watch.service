@@ -1,0 +1,7 @@
+[Unit]
+Description=ZoidLab Foundry live health watch (alerts on state change)
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/home/mike/foundry-ops/foundry-watch.sh

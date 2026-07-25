@@ -1,0 +1,10 @@
+[Unit]
+Description=Weekly Foundry restore drill (Sat 06:00 UTC)
+
+[Timer]
+OnCalendar=Sat *-*-* 06:00:00 UTC
+Persistent=true
+RandomizedDelaySec=120
+
+[Install]
+WantedBy=timers.target

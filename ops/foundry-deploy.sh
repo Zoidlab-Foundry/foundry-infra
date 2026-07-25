@@ -55,4 +55,19 @@ if [ "$WEB" = "1" ] && [ -n "$WEBSVC" ]; then
   sleep 3
   echo "[$DIR] web restarted"
 fi
+
+# Post-deploy smoke gate: the estate-wide smoke must still pass. If it doesn't, the deploy
+# succeeded but something regressed — surface it loudly (non-zero exit) so a bad ship is caught
+# immediately instead of at the next daily scan. Skip with FOUNDRY_DEPLOY_NOSMOKE=1.
+if [ "${FOUNDRY_DEPLOY_NOSMOKE:-0}" != "1" ] && [ -x /home/mike/foundry-ops/foundry-smoke.sh ]; then
+  echo "[$DIR] running post-deploy smoke gate..."
+  if /home/mike/foundry-ops/foundry-smoke.sh >/tmp/deploy_smoke_$DIR.log 2>&1; then
+    echo "[$DIR] smoke: ALL PASS"
+  else
+    echo "[$DIR] SMOKE FAILED after deploy — review /tmp/deploy_smoke_$DIR.log"
+    grep -vE ' 200$| 307$| active$| 3/3$' /tmp/deploy_smoke_$DIR.log | tail -12
+    echo "[$DIR] deployed $NEW but smoke regressed — rollback: foundry-deploy.sh $DIR $OLD"
+    exit 2
+  fi
+fi
 echo "[$DIR] DEPLOYED $NEW"

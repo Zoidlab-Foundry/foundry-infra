@@ -1,0 +1,8 @@
+[Unit]
+Description=Weekly restore drill — prove the backups are restorable
+Wants=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/home/mike/foundry-ops/foundry-restore-drill.sh rag drive
