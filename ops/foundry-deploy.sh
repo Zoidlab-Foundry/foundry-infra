@@ -28,6 +28,14 @@ case "$DIR" in
   *)                API=$app-api; WEBSVC=$app-web; PORT="" ;;
 esac
 
+# Celery workers load task code at start, so an app whose tasks.py changed keeps executing the
+# OLD code until its worker is restarted too. Deploys used to restart only the api/web units,
+# which let workers drift arbitrarily far behind the code they were supposed to be running.
+case "$DIR" in
+  zoidlab-visionlab|zoidlab-voicelab|zoidlab-mcplab|zoidlab-swarmlab) WORKER=$app-worker ;;
+  *) WORKER="" ;;
+esac
+
 OLD=$(git rev-parse --short HEAD 2>/dev/null || echo none)
 git fetch -q origin
 git checkout -q -f "$REF" -- . 2>/dev/null || { git checkout -q -f "$REF"; }
@@ -46,6 +54,14 @@ if [ -n "$API" ]; then
     echo "[$DIR] api health: $H"
     case "$H" in 200|307) ;; *) echo "[$DIR] HEALTH FAILED — rollback: foundry-deploy.sh $DIR $OLD"; exit 1;; esac
   fi
+fi
+
+if [ -n "$WORKER" ]; then
+  sudo systemctl restart "$WORKER.service" 2>/dev/null || systemctl restart "$WORKER.service"
+  sleep 2
+  WS=$(systemctl is-active "$WORKER.service" 2>/dev/null)
+  echo "[$DIR] worker: $WS"
+  [ "$WS" = "active" ] || { echo "[$DIR] WORKER FAILED — rollback: foundry-deploy.sh $DIR $OLD"; exit 1; }
 fi
 
 if [ "$WEB" = "1" ] && [ -n "$WEBSVC" ]; then
