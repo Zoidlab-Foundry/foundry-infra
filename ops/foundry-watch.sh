@@ -22,6 +22,17 @@ for p in 3100 3200 3300 3400 3500 3600 3700 3701 3702 3703 3704 3705 3706 3707 3
   code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "http://127.0.0.1:$p/")
   case "$code" in 200|307) ;; *) echo "web::$p (head $code)" >> "$CUR";; esac
 done
+# Public edge — everything above is localhost, so DNS or a dead Cloudflare tunnel would leave
+# every app unreachable to users while this watch stayed silent. Probe the real hostnames too.
+# One representative failure is enough to page; a total edge outage lists all of them.
+for h in zoidlab.ai foundry.zoidlab.ai builder.zoidlab.ai marketplace.zoidlab.ai \
+         prompter.zoidlab.ai memorymaker.zoidlab.ai rag.zoidlab.ai trustgate.zoidlab.ai \
+         spendguard.zoidlab.ai modelbench.zoidlab.ai eval.zoidlab.ai vision.zoidlab.ai \
+         voice.zoidlab.ai mcplab.zoidlab.ai swarm.zoidlab.ai extractlab.zoidlab.ai \
+         dataforge.zoidlab.ai insight.zoidlab.ai; do
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 "https://$h/" </dev/null)
+  case "$code" in 200|302|307) ;; *) echo "public:$h (head $code)" >> "$CUR";; esac
+done
 for w in visionlab voicelab mcplab swarmlab; do
   [ "$(systemctl is-active "$w-worker.service" 2>/dev/null)" = "active" ] || echo "worker:$w (down)" >> "$CUR"
 done
@@ -59,3 +70,8 @@ fi
 
 cp "$CUR" "$PREV"
 rm -f "$CUR"
+
+# The timer runs this as root, which leaves root-owned state that mike then cannot rewrite —
+# so running the watch by hand fails on exactly the file it needs. Hand the state back each
+# root run so manual invocation keeps working. (Same failure mode as the rclone config.)
+[ "$(id -u)" = "0" ] && chown -R mike:mike "$STATE" 2>/dev/null || true

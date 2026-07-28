@@ -121,6 +121,10 @@ else
   OFFSITE_LINE="skipped (rclone/remote missing)"
 fi
 
+# Privacy purge — destroys pre-scrub backup sets when a marker file asks for it. Runs here
+# because this service is the estate's root context; it is a no-op without the marker.
+[ -x "$OPS/foundry-privacy-purge.sh" ] && "$OPS/foundry-privacy-purge.sh" 2>&1 | sed 's/^/  /' || true
+
 # rclone rewrites the config in place whenever it refreshes the Google OAuth token. Because
 # this service runs as root, that rewrite silently reassigns the file to root and mike loses
 # read access — which breaks running rclone or the restore drill by hand as mike. Root still

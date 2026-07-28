@@ -13,6 +13,25 @@ OPS=/home/mike/foundry-ops
 STATE="$OPS/state"
 DB="${1:-rag}"
 SRC="${2:-drive}"
+
+# Rotation. Drilling only one database proves one database; the other 16 stay unverified.
+# When state/drill-rotate.enabled exists, ignore the CLI db and advance through every database
+# in turn, one per run, so the whole estate is covered on a rolling basis. The CLI arg stays
+# authoritative when rotation is off, and passing an explicit db plus "once" always wins —
+# that keeps ad-hoc drills of a specific database possible without disturbing the rotation.
+DRILL_DBS="builder dataforge eval extractlab foundry insight marketplace mcplab memorymaker modelbench prompter rag spendguard swarmlab trustgate visionlab voicelab"
+if [ -f "$STATE/drill-rotate.enabled" ] && [ "${3:-}" != "once" ]; then
+  IDX_FILE="$STATE/drill-rotate.idx"
+  IDX=$(cat "$IDX_FILE" 2>/dev/null || echo 0)
+  case "$IDX" in ''|*[!0-9]*) IDX=0 ;; esac
+  set -- $DRILL_DBS
+  TOTAL=$#
+  [ "$IDX" -ge "$TOTAL" ] && IDX=0
+  eval "DB=\${$((IDX + 1))}"
+  echo $(( (IDX + 1) % TOTAL )) > "$IDX_FILE"
+  ROTATED=" (rotation $((IDX + 1))/$TOTAL)"
+fi
+ROTATED="${ROTATED:-}"
 export REPORT_TO="${REPORT_TO:-mike@256kmagic.com}"
 PGC=foundry-infra-postgres-1
 RCLONE_BIN=/home/mike/.local/bin/rclone
@@ -78,7 +97,7 @@ VERDICT=$([ "$FAIL" = "0" ] && echo "OK — backup is restorable" || echo "CRITI
   [ "$FAIL" = "0" ] && echo "  none — restored and verified against live" || echo "  [CRITICAL] $NOTES"
   echo
   echo "-- Drill --"
-  echo "Database:        $DB"
+  echo "Database:        $DB$ROTATED"
   echo "Source set:      ${SETDESC:-unavailable}"
   echo "Restored into:   $SCRATCH (throwaway, dropped after)"
   echo "Tables restored: $RESTORED_TABLES  (live has $LIVE_TABLES)"
