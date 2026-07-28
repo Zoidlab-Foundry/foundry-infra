@@ -1,8 +1,8 @@
 # ZoidLab Foundry — Platform Architecture
 
-**Status:** current state as deployed, verified 2026-07-21
+**Status:** current state as deployed, verified 2026-07-26
 **Host:** `zoidberg` · Ubuntu 24.04.4 LTS · kernel 6.8.0-136 · 12 cores · 125 GB RAM · 98 GB disk
-**Scope:** 16 applications + hub + marketing site, 20 repositories, one host
+**Scope:** 16 applications + hub + marketing site, 21 repositories, one host
 
 This document describes what is **actually running**, not what was planned. Every claim below was
 checked against the live host or the committed source on the date above; the method is recorded in
@@ -341,6 +341,22 @@ payload, ownership, dependencies, and **credential *references* — never creden
 `verify()` recomputes the digest on import.
 
 ---
+
+## 9b. The Foundry Assistant
+
+Every app has an in-app assistant (✦ Assist) with three modes — **Ask** (grounded in the user's own
+data), **Guide** (step by step, highlighting real controls) and **Auto-drive** (does the work, every
+write gated behind an approval card). The hub adds a read-only concierge that routes "which app do
+I use for X?" to the right app.
+
+The model only ever emits a strict-JSON action validated against a per-app capability manifest; the
+app executes it through its own session-authed API, so the Pro gate and RLS apply and the assistant
+holds no credentials of its own. Writes carry an HMAC confirmation bound to the owner and params.
+**No delete-class capability is exposed in any app.**
+
+Engine: `foundry_common.assistant` v0.2.4 · panel: `@foundry/ui` · 17 assistant endpoints
+(16 apps + hub), all covered by `foundry-smoke.sh`. Full detail in [DESIGN.md](DESIGN.md) §11b.
+
 
 ## 10. Operations
 

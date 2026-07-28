@@ -1,6 +1,6 @@
 # ZoidLab Foundry — Design & Architecture Reference
 
-**Definitive design document. Verified live against `zoidberg` on 2026-07-25.**
+**Definitive design document. Verified live against `zoidberg` on 2026-07-26.**
 This is the rework-grade reference: it describes what is *actually running* and *why it is shaped
 that way*, so the platform can be evolved deliberately. For the short current-state summary see
 [ARCHITECTURE.md](ARCHITECTURE.md); for recovery procedures see [RUNBOOK.md](RUNBOOK.md).
@@ -12,7 +12,8 @@ that way*, so the platform can be evolved deliberately. For the short current-st
 - **Sections 1–4** are the mental model: what the platform is, its principles, and its topology.
 - **Section 5 (Application anatomy)** is the most important for reworking — it is the single shape
   every app follows. Change the shape here and you change all 16 apps.
-- **Sections 6–12** are the horizontal systems (shared library, data, identity, LLM, jobs, composition).
+- **Sections 6–12** are the horizontal systems (shared library, data, identity, LLM, jobs, composition,
+  and §11b the in-app Assistant).
 - **Sections 13–16** are delivery, operations, security, and disaster recovery.
 - **Sections 17–19** are reference material (repos, per-app detail, conventions).
 - **Sections 20–21** are the honest gap list and the ranked roadmap for where to take it next.
@@ -30,19 +31,19 @@ DataForge feeds them.
 Every app is gated on a **Nyquest Pro** entitlement and bills LLM usage to **the signed-in user's
 own Nyquest wallet**, not a shared account.
 
-### Platform at a glance (verified 2026-07-25)
+### Platform at a glance (verified 2026-07-26)
 
 | Dimension | Value |
 |-----------|-------|
 | Applications | 16 (all Postgres + per-tenant RLS) |
 | Hub + marketing | Foundry hub + zoidlab.ai |
-| Repositories | 20 (`Zoidlab-Foundry` GitHub org) |
+| Repositories | 21 (`Zoidlab-Foundry` GitHub org) |
 | Host | `zoidberg` — Ubuntu 24.04.4, kernel 6.8.0-136, 12 cores, 125 GB RAM, 98 GB disk (46% used) |
 | Running app services | 37 (16 API + 17 web + 4 workers) + `cloudflared` + `zoidlab` site |
 | Databases | 17 app DBs on Postgres 16.14 |
 | Infra | Postgres 16.14, Redis 7.4.9, MinIO — Docker, loopback-only |
 | Runtime | Python 3.12.3 (FastAPI), Node v22.23.1 (Next.js 15 / React 19) |
-| Shared library | `foundry-common` v0.1.1 (9 apps adopted) |
+| Shared library | `foundry-common` v0.2.4 (assistant engine; all 16 apps) · `@foundry/ui` v0.1.0 |
 | Load at capture | 0.14 on 12 cores, 4.8 GB RAM used — the box is ~96% idle |
 
 ---
@@ -159,6 +160,7 @@ zoidlab-<app>/
 │   ├── llm.py                    shim → foundry_common.llm        (Nyquest relay client)
 │   ├── pricing.py                shim → foundry_common.pricing    (model price table; sometimes local)
 │   ├── <engine>.py               the app's real work (extraction_engine / benchmark_engine / …)
+│   ├── assistant_manifest.py     the assistant's capability whitelist (security boundary)
 │   ├── seed_*.py                 owner-NULL seed data (shared via RLS policy)
 │   ├── exporter.py               builds the export payload
 │   ├── requirements.txt          pins foundry-common @ git tag + fastapi/uvicorn/httpx/pydantic/PyJWT
@@ -203,6 +205,7 @@ via a pinned git tag in `requirements.txt`.
 | `llm` | Nyquest relay client — `chat()`, `set_relay_auth()`, `billing_mode()`, `available()` |
 | `pricing` | Model price table + measured-cost helpers |
 | `db` | Postgres+RLS core: `make_pool()`, `make_tx()`, `admin_connect()`, `apply_rls()`, `fork_safe()` |
+| `assistant` | The Ask/Guide/Auto-drive engine — see §11b (`make_router(MANIFEST)`) |
 
 **Adoption map (deliberate, not blanket):** modules that matched the canonical base became
 three-line shims (`from foundry_common.X import *`); genuine variants stay local.
@@ -387,6 +390,62 @@ APIs (see roadmap — highest leverage).
 (`schema_version` 1.0, `package_type: nyquest_foundry_package`) carrying a sha256 integrity digest
 over the canonical payload, ownership, dependencies, and **credential *references* — never values**.
 `verify()` recomputes the digest on import.
+
+---
+
+## 11b. The Foundry Assistant (Ask / Guide / Auto-drive)
+
+Every app carries an in-app assistant, plus a hub-level concierge. Shipped 2026-07-26.
+
+**Three modes** behind the ✦ Assist button: **Ask** (answers grounded in the user's real data),
+**Guide** (one step at a time, highlighting real controls), **Auto-drive** (does the work, with
+every write shown as an approval card).
+
+**The model plans, the app executes** — the same discipline as Insight's NL analyst. The relay
+returns exactly ONE strict-JSON action per turn:
+
+| Action | Meaning |
+|--------|---------|
+| `answer` | reply in text |
+| `lookup` | run a **read** capability — auto-executed |
+| `step` | a Guide step, optionally naming a `data-assist` key to highlight |
+| `propose` | a **write** — returns an HMAC confirmation; nothing runs until the user approves |
+
+**Where it lives:** engine in `foundry_common.assistant` (currently **v0.2.4**), panel in
+`@foundry/ui` (the platform's first shared frontend package), and one
+`backend/assistant_manifest.py` per app — the manifest *is* the security boundary.
+
+**Safety properties (structural, not conventional):**
+- Capabilities are a whitelist bound to the app's own REST routes; unknown capability, unknown
+  param or off-manifest path is rejected before anything runs.
+- Execution goes through the app's own API on loopback with the caller's forwarded session, so
+  `require_pro` + RLS apply and the assistant holds **no credentials of its own** — cross-tenant
+  access is structurally impossible.
+- Writes never auto-execute. The confirmation is HMAC-signed and bound to the owner *and* the
+  exact params (verified: tampered params → 403; another user replaying → 403).
+- **No delete-class capability is exposed in any app.** Human-judgment actions (TrustGate approval
+  resolution, Marketplace submit-for-review) and canvas/UI-native actions (Builder run/deploy/
+  schedules/secrets/orgs) are deliberately omitted.
+- Lookup results are fed back explicitly labeled as data, never instructions.
+- Billed to the user's own relay key (`rk`), metered in SpendGuard; degrades honestly with no key.
+
+**Coverage:** 16 apps + the hub concierge = 17 assistant endpoints, all checked by
+`foundry-smoke.sh`. Capability counts range 6–12 per app (~140 total).
+
+**Builder integrates rather than duplicates:** its single write routes to the existing Flowsmith
+copilot (`POST /api/generate`) to draft a workflow; running, deploying and scheduling stay on the
+canvas. Note Builder gates *every* `/api/*` route, so its assistant health must be checked **with**
+a session — an unauthenticated 401/redirect there is correct, not a fault.
+
+**The hub concierge** (`zoidlab-foundry`, TypeScript — the hub has no Python backend) is
+**read-only by construction**: it has no capabilities at all, answers "which app do I use for X?"
+grounded in the package registry, and returns deep links. Each app's own assistant does the work.
+
+**Engine changelog worth knowing:** v0.2.1 added the auto-drive decisiveness rule (it was
+narrating instead of proposing); v0.2.2 fixed relay-key ordering so users with their own key work
+on apps with no shared key; v0.2.3 + v0.2.4 fixed empty replies — v0.2.3 only guarded *parsed*
+actions, and an empty reply fails to parse and fell through a different return path, so v0.2.4
+retries on empty raw replies too. The concierge carries the same retry.
 
 ---
 
