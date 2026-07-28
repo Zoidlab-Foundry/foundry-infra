@@ -42,6 +42,15 @@ for e in "marketplace:8300:/api/agents" "trustgate:8700:/api/policies" "modelben
   say "auth-read:$a" "$c"
 done
 
+# 3b. Assistant endpoints — every app's in-app assistant plus the hub concierge.
+#     Builder gates all /api/* behind the session, so it is checked WITH the smoke token.
+for e in builder:8200 marketplace:8300 prompter:8400 memorymaker:8500 rag:8600 trustgate:8700          spendguard:8701 modelbench:8702 eval:8703 visionlab:8704 voicelab:8705 mcplab:8706          swarmlab:8707 extractlab:8708 dataforge:8709 insight:8710 hub:3200; do
+  a="${e%%:*}"; p="${e##*:}"
+  out=$(curl -s --max-time 8 -H "Cookie: zb_session=$TOK" "http://127.0.0.1:$p/api/assistant/health")
+  echo "$out" | grep -q '"ok":true' && st="ok" || { st="FAIL"; FAIL=1; }
+  say "assistant:$a" "$st"
+done
+
 # 4. Workers + infra
 for u in visionlab-worker voicelab-worker mcplab-worker swarmlab-worker; do
   s=$(systemctl is-active "$u")
