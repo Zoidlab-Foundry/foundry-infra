@@ -21,6 +21,19 @@ for p in 3100 3200 3300 3400 3500 3600 3700 3701 3702 3703 3704 3705 3706 3707 3
   say "web::$p" "$c"
 done
 
+# 2b. Public reachability — the localhost checks above pass even if DNS or the Cloudflare
+#     tunnel is broken, so prove each canonical hostname resolves and answers from outside.
+#     A hostname that is missing from the tunnel or misspelled in docs fails here.
+for h in zoidlab.ai foundry.zoidlab.ai builder.zoidlab.ai marketplace.zoidlab.ai \
+         prompter.zoidlab.ai memorymaker.zoidlab.ai rag.zoidlab.ai trustgate.zoidlab.ai \
+         spendguard.zoidlab.ai modelbench.zoidlab.ai eval.zoidlab.ai vision.zoidlab.ai \
+         voice.zoidlab.ai mcplab.zoidlab.ai swarm.zoidlab.ai extractlab.zoidlab.ai \
+         dataforge.zoidlab.ai insight.zoidlab.ai; do
+  c=$(curl -s -o /dev/null -w '%{http_code}' --max-time 20 "https://$h/" </dev/null)
+  case "$c" in 200|302|307) ;; *) FAIL=1 ;; esac
+  say "public:$h" "$c"
+done
+
 # 3. Authenticated read per app — a minted Pro session must see data through the full stack
 SECRET=$(grep -E '^BUILDER_SESSION_SECRET=' /home/mike/zoidlab-visionlab/backend/.env | cut -d= -f2-)
 TOK=$(python3 - "$SECRET" <<'PY'

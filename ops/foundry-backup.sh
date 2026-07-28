@@ -121,6 +121,16 @@ else
   OFFSITE_LINE="skipped (rclone/remote missing)"
 fi
 
+# rclone rewrites the config in place whenever it refreshes the Google OAuth token. Because
+# this service runs as root, that rewrite silently reassigns the file to root and mike loses
+# read access — which breaks running rclone or the restore drill by hand as mike. Root still
+# reads it, so the nightly job keeps working and the breakage stays invisible until someone
+# needs it. Hand it back every run.
+if [ -e "$RCLONE_CONF" ]; then
+  chown mike:mike "$RCLONE_CONF" 2>/dev/null || true
+  chmod 600 "$RCLONE_CONF" 2>/dev/null || true
+fi
+
 if [ ${#FAILS[@]} -gt 0 ]; then VERDICT="CRITICAL (${#FAILS[@]} failed)";
 elif [ ${#WARNS[@]} -gt 0 ]; then VERDICT="WARNINGS (${#WARNS[@]})";
 else VERDICT="OK"; fi
