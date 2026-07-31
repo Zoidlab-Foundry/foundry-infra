@@ -33,8 +33,16 @@ esac
 # which let workers drift arbitrarily far behind the code they were supposed to be running.
 case "$DIR" in
   zoidlab-visionlab|zoidlab-voicelab|zoidlab-mcplab|zoidlab-swarmlab) WORKER=$app-worker ;;
+  zoidlab-rag-builder) WORKER=rag-worker ;;   # service is rag-*, not rag-builder-*
   *) WORKER="" ;;
 esac
+# Tolerate a worker that isn't installed yet: RAG's unit needs root to place in
+# /etc/systemd/system, so the app ships and runs (ingest falls back to inline) before the
+# worker exists. Skipping beats failing a deploy over an optional component.
+if [ -n "$WORKER" ] && ! systemctl list-unit-files --no-legend "$WORKER.service" 2>/dev/null | grep -q .; then
+  echo "[$DIR] worker $WORKER not installed — skipping (app runs without it)"
+  WORKER=""
+fi
 
 OLD=$(git rev-parse --short HEAD 2>/dev/null || echo none)
 git fetch -q origin
