@@ -64,6 +64,23 @@ for e in builder:8200 marketplace:8300 prompter:8400 memorymaker:8500 rag:8600 t
   say "assistant:$a" "$st"
 done
 
+# 3c. Default-deny check — every app's primary data endpoint must REFUSE an anonymous caller.
+#     This is a regression guard, not a nicety: the Next middleware treats /api as public and
+#     rewrites it to the backend, so a route that forgets its gate is immediately internet
+#     readable. Two such routes leaked real tenant data before this check existed.
+#     Marketplace is deliberately excluded — /api/agents is a public catalog that filters by
+#     viewer, so 200 is correct there.
+for e in "builder:8200:/api/workflows" "prompter:8400:/api/prompts" "memorymaker:8500:/api/stores" \
+         "rag:8600:/api/knowledge-bases" "trustgate:8700:/api/policies" "spendguard:8701:/api/projects" \
+         "modelbench:8702:/api/datasets" "eval:8703:/api/targets" "visionlab:8704:/api/assets" \
+         "voicelab:8705:/api/agents" "mcplab:8706:/api/connectors" "swarmlab:8707:/api/swarms" \
+         "extractlab:8708:/api/schemas" "dataforge:8709:/api/generators" "insight:8710:/api/datasets"; do
+  a=$(echo "$e" | cut -d: -f1); p=$(echo "$e" | cut -d: -f2); path=$(echo "$e" | cut -d: -f3)
+  c=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "http://127.0.0.1:$p$path" </dev/null)
+  case "$c" in 401|403) st="refused" ;; *) st="** ANONYMOUS READ ($c) **"; FAIL=1 ;; esac
+  say "no-anon:$a" "$st"
+done
+
 # 4. Workers + infra
 for u in visionlab-worker voicelab-worker mcplab-worker swarmlab-worker; do
   s=$(systemctl is-active "$u")
